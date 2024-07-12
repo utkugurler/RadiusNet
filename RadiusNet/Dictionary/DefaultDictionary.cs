@@ -11,27 +11,36 @@ namespace RadiusNet.Dictionary;
 /// </summary>
 public class DefaultDictionary : MemoryDictionary
 {
-    private static readonly string DICTIONARY_RESOURCE = "org.tinyradius.dictionary.default_dictionary";
+    private static readonly string DICTIONARY_RESOURCE = "Dictionary.DefaultDictionary";
     private static readonly DefaultDictionary instance;
 
     static DefaultDictionary()
     {
         try
         {
+            var stream = new MemoryStream();
             instance = new DefaultDictionary();
-            Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("tinyradius_dictionary");
-            if (source == null)
-            {
-                source = Assembly.GetExecutingAssembly().GetManifestResourceStream(DICTIONARY_RESOURCE);
+            using (MemoryStream ms = new MemoryStream())
+            using (FileStream file = new FileStream("DefaultDictionary", FileMode.Open, FileAccess.Read)) {
+                byte[] bytes = new byte[file.Length];
+                file.Read(bytes, 0, (int)file.Length);
+                ms.Write(bytes, 0, (int)file.Length);
+                stream.Write(bytes, 0, (int)file.Length);
             }
-            if (source != null)
+            
+            if (stream == null)
             {
-                DictionaryParser.ParseDictionary(source, instance);
+                //source = Assembly.GetExecutingAssembly().GetManifestResourceStream(DICTIONARY_RESOURCE);
+            }
+            if (stream != null)
+            {
+                DictionaryParser.ParseDictionary(stream, instance);
             }
             else
             {
                 throw new IOException("Dictionary resource not found.");
             }
+            
         }
         catch (IOException e)
         {
@@ -52,7 +61,7 @@ public class DefaultDictionary : MemoryDictionary
     /// Make constructor private so that a DefaultDictionary
     /// cannot be constructed by other classes.
     /// </summary>
-    private DefaultDictionary()
+    public DefaultDictionary()
     {
     }
 }

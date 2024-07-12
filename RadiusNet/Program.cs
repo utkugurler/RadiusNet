@@ -1,3 +1,9 @@
-﻿// See https://aka.ms/new-console-template for more information
+﻿
+using RadiusNet.Dictionary;
+using RadiusNet.Test;
 
-Console.WriteLine("Hello, World!");
+// await TestServer.Main(new string[1234]);
+
+DefaultDictionary.GetDefaultDictionary();
+
+// Console.WriteLine(a);

@@ -31,8 +31,8 @@ public class CoaRequest : RadiusPacket
         using (MD5 md5 = MD5.Create())
         {
             md5.Initialize();
-            md5.TransformBlock(new byte[] { (byte)GetPacketType() }, 0, 1, null, 0);
-            md5.TransformBlock(new byte[] { (byte)GetPacketIdentifier() }, 0, 1, null, 0);
+            md5.TransformBlock(new byte[] { (byte)PacketType }, 0, 1, null, 0);
+            md5.TransformBlock(new byte[] { (byte)PacketIdentifier }, 0, 1, null, 0);
             md5.TransformBlock(new byte[] { (byte)(packetLength >> 8) }, 0, 1, null, 0);
             md5.TransformBlock(new byte[] { (byte)(packetLength & 0xff) }, 0, 1, null, 0);
             md5.TransformBlock(authenticator, 0, authenticator.Length, null, 0);
