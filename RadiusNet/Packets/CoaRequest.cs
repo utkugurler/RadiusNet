@@ -29,19 +29,30 @@ public class CoaRequest : RadiusPacket
         byte[] authenticator = new byte[16];
         
         using (var md5 = MD5.Create())
-        using (var combinedStream = new MemoryStream())
-        using (var writer = new BinaryWriter(combinedStream))
         {
-            // Write packet header components
-            writer.Write((byte)PacketType);
-            writer.Write((byte)PacketIdentifier);
-            writer.Write((short)packetLength);
-            writer.Write(authenticator);  // 16 bytes of zeros
-            writer.Write(attributes);
-            writer.Write(Encoding.UTF8.GetBytes(sharedSecret));
+            byte[] buffer = new byte[4 + 16 + attributes.Length + sharedSecret.Length];
+            int offset = 0;
+
+            // Code (1 byte)
+            buffer[offset++] = (byte)PacketType;
+            // ID (1 byte)
+            buffer[offset++] = (byte)PacketIdentifier;
+            // Length (2 bytes) - in network byte order (big-endian)
+            buffer[offset++] = (byte)(packetLength >> 8);
+            buffer[offset++] = (byte)(packetLength & 0xff);
             
-            // Calculate MD5 hash
-            return md5.ComputeHash(combinedStream.ToArray());
+            // Zero authenticator (16 bytes)
+            offset += 16;
+            
+            // Attributes
+            Buffer.BlockCopy(attributes, 0, buffer, offset, attributes.Length);
+            offset += attributes.Length;
+            
+            // Shared secret
+            byte[] secretBytes = Encoding.UTF8.GetBytes(sharedSecret);
+            Buffer.BlockCopy(secretBytes, 0, buffer, offset, secretBytes.Length);
+
+            return authenticator = md5.ComputeHash(buffer);
         }
     }
 

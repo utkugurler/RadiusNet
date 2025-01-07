@@ -374,36 +374,25 @@ public class RadiusPacket
         if (string.IsNullOrEmpty(sharedSecret))
             throw new InvalidOperationException("No shared secret has been set");
 
-        byte[] attributes = GetAttributeBytes();
-        int packetLength = 20 + attributes.Length; // 20 is RADIUS_HEADER_LENGTH
-
-        // Create authenticator
-        authenticator = new byte[16];
-        using (var md5 = MD5.Create())
+        if (request == null)
         {
-            byte[] buffer = new byte[4 + 16 + attributes.Length + sharedSecret.Length];
-            int offset = 0;
+            authenticator = CreateRequestAuthenticator(sharedSecret);
+            EncodeRequestAttributes(sharedSecret);
+        }
+        
+        
+        byte[] attributes = GetAttributeBytes();
+        int packetLength = RADIUS_HEADER_LENGTH + attributes.Length; // 20 is RADIUS_HEADER_LENGTH
+        if (packetLength > MAX_PACKET_LENGTH)
+            throw new Exception("packet too long");
 
-            // Code (1 byte)
-            buffer[offset++] = (byte)PacketType;
-            // ID (1 byte)
-            buffer[offset++] = (byte)PacketIdentifier;
-            // Length (2 bytes) - in network byte order (big-endian)
-            buffer[offset++] = (byte)(packetLength >> 8);
-            buffer[offset++] = (byte)(packetLength & 0xff);
-            
-            // Zero authenticator (16 bytes)
-            offset += 16;
-            
-            // Attributes
-            Buffer.BlockCopy(attributes, 0, buffer, offset, attributes.Length);
-            offset += attributes.Length;
-            
-            // Shared secret
-            byte[] secretBytes = Encoding.UTF8.GetBytes(sharedSecret);
-            Buffer.BlockCopy(secretBytes, 0, buffer, offset, secretBytes.Length);
-
-            authenticator = md5.ComputeHash(buffer);
+        if (request != null)
+        {
+            authenticator = CreateResponseAuthenticator(sharedSecret, packetLength, attributes, authenticator);
+        }
+        else
+        {
+            authenticator = UpdateRequestAuthenticator(sharedSecret, packetLength, attributes);
         }
         
         // Now write the actual packet
