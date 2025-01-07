@@ -3,6 +3,7 @@ using System.Text;
 using RadiusNet.Attribute;
 using RadiusNet.Dictionary;
 using RadiusNet.Utils;
+using TinyRadius.Dictionary;
 
 namespace RadiusNet.Packets;
 
@@ -21,7 +22,7 @@ public class RadiusPacket
     public const int ACCESS_CHALLENGE = 11;
     public const int STATUS_SERVER = 12;
     public const int STATUS_CLIENT = 13;
-    public const int DISCONNECT_REQUEST = 40; 
+    public const int DISCONNECT_REQUEST = 40;
     public const int DISCONNECT_ACK = 41;
     public const int DISCONNECT_NAK = 42;
     public const int COA_REQUEST = 43;
@@ -38,10 +39,10 @@ public class RadiusPacket
 
     private static int nextPacketId = 0;
     private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
-    private byte[] authenticator = null;
+    public byte[] authenticator = null;
     private IDictionary dictionary = DefaultDictionary.GetDefaultDictionary();
 
-    public int PacketType { get; private set; } = UNDEFINED;
+    public int PacketType { get; set; } = UNDEFINED;
     public int PacketIdentifier { get; private set; } = 0;
     public List<RadiusAttribute> Attributes { get; private set; } = new List<RadiusAttribute>();
 
@@ -146,7 +147,7 @@ public class RadiusPacket
         if (string.IsNullOrEmpty(value))
             throw new ArgumentException("Value is empty", nameof(value));
 
-        var type = dictionary.GetAttributeTypeByName(typeName) 
+        var type = dictionary.GetAttributeTypeByName(typeName)
                    ?? throw new ArgumentException($"Unknown attribute type '{typeName}'", nameof(typeName));
 
         var attribute = RadiusAttribute.CreateRadiusAttribute(dictionary, type.GetVendorId(), type.GetTypeCode());
@@ -256,7 +257,7 @@ public class RadiusPacket
         if (string.IsNullOrEmpty(type))
             throw new ArgumentException("Type name is empty", nameof(type));
 
-        var t = dictionary.GetAttributeTypeByName(type) 
+        var t = dictionary.GetAttributeTypeByName(type)
                 ?? throw new ArgumentException($"Unknown attribute type name '{type}'", nameof(type));
 
         return GetAttribute(t.GetVendorId(), t.GetTypeCode());
@@ -282,7 +283,7 @@ public class RadiusPacket
             nextPacketId = 0;
         return nextPacketId;
     }
-    
+
     public static RadiusPacket CreateRadiusPacket(int type)
     {
         RadiusPacket rp = type switch
@@ -334,53 +335,30 @@ public class RadiusPacket
             attr.SetDictionary(dictionary);
         }
     }
-    
-    /// <summary>
-    /// Reads a Radius request packet from the given input stream and
-    /// creates an appropriate RadiusPacket descendant object.
-    /// Reads in all attributes and returns the object.
-    /// Decodes the encrypted fields and attributes of the packet.
-    /// </summary>
-    /// <param name="inStream">Input stream to read packet from</param>
-    /// <param name="sharedSecret">Shared secret to be used to decode this packet</param>
-    /// <returns>New RadiusPacket object</returns>
-    /// <exception cref="IOException">IO error</exception>
-    /// <exception cref="RadiusException">Malformed packet</exception>
+
     public static RadiusPacket DecodeRequestPacket(Stream inStream, string sharedSecret)
     {
         return DecodePacket(DefaultDictionary.GetDefaultDictionary(), inStream, sharedSecret, null);
     }
 
-    /// <summary>
-    /// Reads a Radius request packet from the given input stream and
-    /// creates an appropriate RadiusPacket descendant object.
-    /// Reads in all attributes and returns the object.
-    /// Decodes the encrypted fields and attributes of the packet.
-    /// </summary>
-    /// <param name="inStream">Input stream to read packet from</param>
-    /// <param name="sharedSecret">Shared secret to be used to decode this packet</param>
-    /// <param name="forceType">Forced packet type</param>
-    /// <returns>New RadiusPacket object</returns>
-    /// <exception cref="IOException">IO error</exception>
-    /// <exception cref="RadiusException">Malformed packet</exception>
     public static RadiusPacket DecodeRequestPacket(Stream inStream, string sharedSecret, int forceType)
     {
         return DecodePacket(DefaultDictionary.GetDefaultDictionary(), inStream, sharedSecret, null, forceType);
     }
-    
+
     public static RadiusPacket DecodeResponsePacket(Stream inStream, string sharedSecret, RadiusPacket request)
     {
         if (request == null)
             throw new ArgumentNullException(nameof(request), "request may not be null");
-            
+
         return DecodePacket(request.GetDictionary(), inStream, sharedSecret, request);
     }
-    
+
     public void EncodeRequestPacket(Stream outStream, string sharedSecret)
     {
         EncodePacket(outStream, sharedSecret, null);
     }
-    
+
     public void EncodeResponsePacket(Stream outputStream, string sharedSecret, RadiusPacket request)
     {
         if (request == null)
@@ -391,41 +369,58 @@ public class RadiusPacket
         EncodePacket(outputStream, sharedSecret, request);
     }
 
-
-    protected void EncodePacket(Stream outStream, string sharedSecret, RadiusPacket request)
+    private void EncodePacket(Stream outStream, string sharedSecret, RadiusPacket request)
     {
         if (string.IsNullOrEmpty(sharedSecret))
             throw new InvalidOperationException("No shared secret has been set");
 
-        if (request != null && request.GetAuthenticator() == null)
-            throw new InvalidOperationException("Request authenticator not set");
+        byte[] attributes = GetAttributeBytes();
+        int packetLength = 20 + attributes.Length; // 20 is RADIUS_HEADER_LENGTH
 
-        if (request == null)
+        // Create authenticator
+        authenticator = new byte[16];
+        using (var md5 = MD5.Create())
         {
-            authenticator = CreateRequestAuthenticator(sharedSecret);
-            EncodeRequestAttributes(sharedSecret);
+            byte[] buffer = new byte[4 + 16 + attributes.Length + sharedSecret.Length];
+            int offset = 0;
+
+            // Code (1 byte)
+            buffer[offset++] = (byte)PacketType;
+            // ID (1 byte)
+            buffer[offset++] = (byte)PacketIdentifier;
+            // Length (2 bytes) - in network byte order (big-endian)
+            buffer[offset++] = (byte)(packetLength >> 8);
+            buffer[offset++] = (byte)(packetLength & 0xff);
+            
+            // Zero authenticator (16 bytes)
+            offset += 16;
+            
+            // Attributes
+            Buffer.BlockCopy(attributes, 0, buffer, offset, attributes.Length);
+            offset += attributes.Length;
+            
+            // Shared secret
+            byte[] secretBytes = Encoding.UTF8.GetBytes(sharedSecret);
+            Buffer.BlockCopy(secretBytes, 0, buffer, offset, secretBytes.Length);
+
+            authenticator = md5.ComputeHash(buffer);
         }
-
-        var attributes = GetAttributeBytes();
-        var packetLength = RADIUS_HEADER_LENGTH + attributes.Length;
-        if (packetLength > MAX_PACKET_LENGTH)
-            throw new InvalidOperationException("Packet too long");
-
-        if (request != null)
+        
+        // Now write the actual packet
+        using (var writer = new BinaryWriter(outStream, Encoding.UTF8, true))
         {
-            authenticator = CreateResponseAuthenticator(sharedSecret, packetLength, attributes, request.GetAuthenticator());
+            // Code
+            writer.Write((byte)PacketType);
+            // ID
+            writer.Write((byte)PacketIdentifier);
+            // Length (in network byte order)
+            writer.Write((byte)(packetLength >> 8));
+            writer.Write((byte)(packetLength & 0xff));
+            // Authenticator
+            writer.Write(authenticator);
+            // Attributes
+            writer.Write(attributes);
         }
-        else
-        {
-            authenticator = UpdateRequestAuthenticator(sharedSecret, packetLength, attributes);
-        }
-
-        using var dos = new BinaryWriter(outStream);
-        dos.Write((byte)PacketType);
-        dos.Write((byte)PacketIdentifier);
-        dos.Write((short)packetLength);
-        dos.Write(authenticator);
-        dos.Write(attributes);
     }
 
     protected virtual void EncodeRequestAttributes(string sharedSecret) { }
@@ -451,19 +446,30 @@ public class RadiusPacket
 
     protected byte[] CreateResponseAuthenticator(string sharedSecret, int packetLength, byte[] attributes, byte[] requestAuthenticator)
     {
-        using var md5 = MD5.Create();
-        md5.Initialize();
-        md5.TransformBlock(new[] { (byte)PacketType }, 0, 1, null, 0);
-        md5.TransformBlock(new[] { (byte)PacketIdentifier }, 0, 1, null, 0);
-        md5.TransformBlock(BitConverter.GetBytes((short)packetLength), 0, 2, null, 0);
-        md5.TransformBlock(requestAuthenticator, 0, requestAuthenticator.Length, null, 0);
-        md5.TransformBlock(attributes, 0, attributes.Length, null, 0);
-        md5.TransformBlock(RadiusUtil.GetUtf8Bytes(sharedSecret), 0, sharedSecret.Length, null, 0);
-        md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        return md5.Hash;
+        using (MD5 md5 = MD5.Create())
+        {
+            md5.Initialize();
+            // Paket tipini ekle
+            md5.TransformBlock(new byte[] { (byte)PacketType }, 0, 1, null, 0);
+            // Paket kimliğini ekle
+            md5.TransformBlock(new byte[] { (byte)PacketIdentifier }, 0, 1, null, 0);
+            // Paket uzunluğunu ekle (büyük endian)
+            md5.TransformBlock(new byte[] { (byte)(packetLength >> 8), (byte)(packetLength & 0xFF) }, 0, 2, null, 0);
+            // İstek kimlik doğrulayıcısını ekle
+            md5.TransformBlock(requestAuthenticator, 0, requestAuthenticator.Length, null, 0);
+            // Özellikleri ekle
+            md5.TransformBlock(attributes, 0, attributes.Length, null, 0);
+            // Paylaşılan sırrı ekle
+            byte[] sharedSecretBytes = Encoding.UTF8.GetBytes(sharedSecret);
+            md5.TransformFinalBlock(sharedSecretBytes, 0, sharedSecretBytes.Length);
+
+            // Sonuç döndür
+            return md5.Hash;
+        }
     }
 
-    protected static RadiusPacket DecodePacket(IDictionary dictionary, Stream inStream, string sharedSecret, RadiusPacket request, int forceType = UNDEFINED)
+
+    private static RadiusPacket DecodePacket(IDictionary dictionary, Stream inStream, string sharedSecret, RadiusPacket request, int forceType = UNDEFINED)
     {
         if (string.IsNullOrEmpty(sharedSecret))
             throw new InvalidOperationException("No shared secret has been set");
@@ -545,14 +551,21 @@ public class RadiusPacket
 
     protected byte[] GetAttributeBytes()
     {
-        using var bos = new MemoryStream(MAX_PACKET_LENGTH);
-        foreach (var a in Attributes)
+        // Sıralı ve güvenilir buffer
+        using var bos = new MemoryStream();
+
+        // Sıralı koleksiyon kontrolü
+        foreach (var a in Attributes.OrderBy(attr => attr.GetAttributeType()))
         {
-            bos.Write(a.WriteAttribute());
+            var buffer = a.WriteAttribute();
+            if (bos.Length + buffer.Length > MAX_PACKET_LENGTH)
+                throw new InvalidOperationException("Packet too long");
+
+            bos.Write(buffer, 0, buffer.Length); // Buffer üzerinden yaz
         }
-        bos.Flush();
-        return bos.ToArray();
+
+        bos.Flush(); // Tamponu temizle
+        return bos.ToArray(); // Byte dizisine dönüştür
     }
-    
-    
+
 }

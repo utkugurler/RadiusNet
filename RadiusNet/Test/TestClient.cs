@@ -6,54 +6,28 @@ namespace RadiusNet.Test;
 
 public class TestClient
 {
-    //private static readonly ILogger<TestClient> logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<TestClient>();
-
-    /// <summary>
-    /// Radius command line client.
-    ///
-    /// Usage: TestClient <i>hostName sharedSecret userName password</i>
-    /// </summary>
-    /// <param name="args">arguments</param>
-    public static void Main(string[] args)
+    public static void Main()
     {
-        if (args.Length != 4)
+        CoaRequest coaRequest = new CoaRequest();
+        RadiusClient client = new RadiusClient("193.192.126.156", "ka05ur15");
+        coaRequest.SetPacketType(RadiusPacket.DISCONNECT_REQUEST);
+        coaRequest.AddAttribute("User-Name", "operasyon2test@turk.net");
+
+        try
         {
-            Console.WriteLine("Usage: TestClient hostName sharedSecret userName password");
-            Environment.Exit(1);
+            RadiusPacket response = client.Communicate(coaRequest, 1645);
+            if (response != null && response.PacketType == RadiusPacket.DISCONNECT_ACK)
+            {
+                Console.WriteLine("Disconnect request acknowledged.");
+            }
+            else
+            {
+                Console.WriteLine("Failed to receive a valid response.");
+            }
         }
-
-        string host = "";
-        string shared = "";
-        string user = "";
-        string pass = "";
-
-        RadiusClient rc = new RadiusClient(host, shared);
-
-        // 1. Send Access-Request
-        AccessRequest ar = new AccessRequest(user, pass);
-        ar.SetAuthProtocol(AccessRequest.AUTH_PAP);
-        //ar.SetAuthProtocol(AccessRequest.AUTH_PAP); // or AUTH_CHAP
-        ar.AddAttribute("NAS-Identifier", "abcds");
-        ar.AddAttribute("NAS-IP-Address", "192.168.0.100");
-        ar.AddAttribute("Service-Type", "Login-User");
-        ar.AddAttribute("WISPr-Redirection-URL", "abcd");
-        ar.AddAttribute("WISPr-Location-ID", "abcd");
-
-        Console.WriteLine("Packet before it is sent\n" + ar + "\n");
-        RadiusPacket response = rc.Authenticate(ar);
-        Console.WriteLine("Packet after it was sent\n" + ar + "\n");
-        Console.WriteLine("Response\n" + response + "\n");
-
-        // 2. Send Accounting-Request
-        AccountingRequest acc = new AccountingRequest("mw", AccountingRequest.ACCT_STATUS_TYPE_START);
-        acc.AddAttribute("Acct-Session-Id", "1234567890");
-        acc.AddAttribute("NAS-Identifier", "abcd");
-        acc.AddAttribute("NAS-Port", "0");
-
-        Console.WriteLine(acc + "\n");
-        response = rc.Account(acc);
-        Console.WriteLine("Response: " + response);
-
-        rc.Close();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
     }
 }

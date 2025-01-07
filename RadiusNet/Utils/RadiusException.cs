@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+
 namespace RadiusNet.Utils;
 
 /// <summary>
@@ -7,14 +9,17 @@ namespace RadiusNet.Utils;
 public class RadiusException : Exception
 {
     public static readonly long SerialVersionUID = 2201204523946051388L;
-    
+
     /// <summary>
     /// Constructs a RadiusException with a message.
     /// </summary>
     /// <param name="message">Error message</param>
-    public RadiusException(string message) : base(message)
+    /// <param name="socketException"></param>
+    public RadiusException(string message, SocketException socketException) : base(message)
     {
     }
 
-    
+    public RadiusException(string failedToCommunicateWithRadiusServer)
+    {
+    }
 }

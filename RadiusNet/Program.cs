@@ -1,9 +1,9 @@
 ﻿
 using RadiusNet.Dictionary;
+using RadiusNet.Packets;
 using RadiusNet.Test;
+using RadiusNet.Utils;
 
-// await TestServer.Main(new string[1234]);
-
-DefaultDictionary.GetDefaultDictionary();
+TestClient.Main();
 
 // Console.WriteLine(a);

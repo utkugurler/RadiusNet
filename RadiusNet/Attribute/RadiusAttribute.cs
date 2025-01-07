@@ -1,5 +1,6 @@
 using RadiusNet.Dictionary;
 using RadiusNet.Utils;
+using TinyRadius.Dictionary;
 
 namespace RadiusNet.Attribute;
 
@@ -76,7 +77,9 @@ public class RadiusAttribute
     /// <param name="value">Value as a string</param>
     public virtual void SetAttributeValue(string value)
     {
-        throw new NotSupportedException("cannot set the value of attribute " + attributeType + " as a string");
+        if (string.IsNullOrEmpty(value))
+            throw new NotSupportedException("cannot set the value of attribute " + attributeType + " as a string");
+        SetAttributeData(System.Text.Encoding.Default.GetBytes(value));
     }
 
     /// <summary>
