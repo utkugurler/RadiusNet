@@ -12,8 +12,7 @@ namespace TinyRadius.Dictionary
     /// </summary>
     public class DefaultDictionary : MemoryDictionary
     {
-        private static readonly string DICTIONARY_FILE_NAME = "DefaultDictionary";
-        private static readonly string FALLBACK_DICTIONARY_PATH = "Resource/default_dictionary";
+        private const string DICTIONARY_FILE_NAME = "Resource/default_dictionary";
         private static DefaultDictionary instance;
 
         /// <summary>
@@ -43,8 +42,7 @@ namespace TinyRadius.Dictionary
             {
                 instance = new DefaultDictionary();
                 
-                string mainPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DICTIONARY_FILE_NAME);
-                string fallbackPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FALLBACK_DICTIONARY_PATH);
+                string mainPath = Path.Combine(AppContext.BaseDirectory, "Resource", "DefaultDictionary");
 
                 if (File.Exists(mainPath))
                 {
@@ -53,19 +51,10 @@ namespace TinyRadius.Dictionary
                         DictionaryParser.ParseDictionary(stream, instance);
                     }
                 }
-                else if (File.Exists(fallbackPath))
-                {
-                    using (FileStream stream = File.OpenRead(fallbackPath))
-                    {
-                        DictionaryParser.ParseDictionary(stream, instance);
-                    }
-                }
                 else
                 {
-                    // Eğer dosya bulunamazsa, gömülü kaynakları dene
                     var assembly = typeof(DefaultDictionary).Assembly;
-                    using (Stream stream = assembly.GetManifestResourceStream(DICTIONARY_FILE_NAME) 
-                        ?? assembly.GetManifestResourceStream(FALLBACK_DICTIONARY_PATH))
+                    using (Stream? stream = assembly.GetManifestResourceStream(DICTIONARY_FILE_NAME))
                     {
                         if (stream == null)
                         {

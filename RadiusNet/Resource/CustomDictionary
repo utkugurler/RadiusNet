@@ -267,4 +267,3 @@ VENDOR			9	CISCO
 VENDORATTR      9   Cisco-AVPair                 1       string
 VENDORATTR      9   Cisco-NAS-Port               2       string
 VENDORATTR      9   Cisco-Account-Info           250      string
-VENDORATTR      9   Cisco-Account-Info           250      string

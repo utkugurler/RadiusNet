@@ -17,4 +17,11 @@
       <PackageReference Include="xunit" Version="2.9.2" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="bin\Debug\net7.0\CustomDictionary" />
+        <None Include="Resource\DefaultDictionary">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
 </Project>

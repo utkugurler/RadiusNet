@@ -53,7 +53,7 @@ public class IpAttribute : RadiusAttribute
     /// Sets the attribute value (IP number). String format: "xx.xx.xx.xx".
     /// </summary>
     /// <param name="value">IP number as a string</param>
-    public override void SetAttributeValue(string value)
+    public sealed override void SetAttributeValue(string value)
     {
         if (string.IsNullOrEmpty(value) || value.Length < 7 || value.Length > 15)
             throw new ArgumentException("Bad IP number");

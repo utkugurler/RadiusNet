@@ -32,6 +32,71 @@ public class AccessRequest : RadiusPacket
     public static readonly HashSet<string> AUTH_PROTOCOLS = new HashSet<string> { AUTH_PAP, AUTH_CHAP, AUTH_MS_CHAP_V2, AUTH_EAP };
 
     /// <summary>
+    /// Temporary storage for the unencrypted User-Password attribute.
+    /// </summary>
+    private string password;
+
+    /// <summary>
+    /// Authentication protocol for this access request.
+    /// </summary>
+    private string authProtocol = AUTH_PAP;
+
+    /// <summary>
+    /// CHAP password from a decoded CHAP Access-Request.
+    /// </summary>
+    private byte[] chapPassword;
+
+    /// <summary>
+    /// CHAP challenge from a decoded CHAP Access-Request.
+    /// </summary>
+    private byte[] chapChallenge;
+
+    /// <summary>
+    /// Random generator
+    /// </summary>
+    private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
+
+    /// <summary>
+    /// Radius type code for Radius attribute User-Name
+    /// </summary>
+    private const int USER_NAME = 1;
+
+    /// <summary>
+    /// Radius attribute type for User-Password attribute.
+    /// </summary>
+    private const int USER_PASSWORD = 2;
+
+    /// <summary>
+    /// Radius attribute type for CHAP-Password attribute.
+    /// </summary>
+    private const int CHAP_PASSWORD = 3;
+
+    /// <summary>
+    /// Radius attribute type for CHAP-Challenge attribute.
+    /// </summary>
+    private const int CHAP_CHALLENGE = 60;
+
+    /// <summary>
+    /// Radius attribute type for EAP-Message attribute.
+    /// </summary>
+    private const int EAP_MESSAGE = 79;
+
+    /// <summary>
+    /// Vendor id for Microsoft
+    /// </summary>
+    private const int MICROSOFT = 311;
+
+    /// <summary>
+    /// Radius attribute type for MS-CHAP-Challenge attribute.
+    /// </summary>
+    private const int MS_CHAP_CHALLENGE = 11;
+
+    /// <summary>
+    /// Radius attribute type for MS-CHAP-Challenge attribute.
+    /// </summary>
+    private const int MS_CHAP2_RESPONSE = 25;
+    
+    /// <summary>
     /// Constructs an empty Access-Request packet.
     /// </summary>
     public AccessRequest() : base(ACCESS_REQUEST)
@@ -76,16 +141,7 @@ public class AccessRequest : RadiusPacket
             throw new ArgumentException("Password is empty");
         this.password = userPassword;
     }
-
-    /// <summary>
-    /// Retrieves the plain-text user password.
-    /// Returns null for CHAP - use verifyPassword().
-    /// </summary>
-    /// <returns>User password</returns>
-    public string GetUserPassword()
-    {
-        return password;
-    }
+    
 
     /// <summary>
     /// Retrieves the user name from the User-Name attribute.
@@ -99,15 +155,6 @@ public class AccessRequest : RadiusPacket
 
         var ra = (StringAttribute)attrs[0];
         return ra.GetAttributeValue();
-    }
-
-    /// <summary>
-    /// Returns the protocol used for encrypting the passphrase.
-    /// </summary>
-    /// <returns>AUTH_PAP or AUTH_CHAP</returns>
-    public string GetAuthProtocol()
-    {
-        return authProtocol;
     }
 
     /// <summary>
@@ -133,13 +180,13 @@ public class AccessRequest : RadiusPacket
     {
         if (string.IsNullOrEmpty(plaintext))
             throw new ArgumentException("Password is empty");
-        if (GetAuthProtocol().Equals(AUTH_CHAP))
+        if (authProtocol.Equals(AUTH_CHAP))
             return VerifyChapPassword(plaintext);
-        if (GetAuthProtocol().Equals(AUTH_MS_CHAP_V2))
+        if (authProtocol.Equals(AUTH_MS_CHAP_V2))
             throw new RadiusException($"{AUTH_MS_CHAP_V2} verification not supported yet");
-        if (GetAuthProtocol().Equals(AUTH_EAP))
+        if (authProtocol.Equals(AUTH_EAP))
             throw new RadiusException($"{AUTH_EAP} verification not supported yet");
-        return GetUserPassword().Equals(plaintext);
+        return password.Equals(plaintext);
     }
 
     /// <summary>
@@ -200,13 +247,13 @@ public class AccessRequest : RadiusPacket
         if (string.IsNullOrEmpty(password))
             return;
 
-        if (GetAuthProtocol().Equals(AUTH_PAP))
+        if (authProtocol.Equals(AUTH_PAP))
         {
             byte[] pass = EncodePapPassword(RadiusUtil.GetUtf8Bytes(this.password), RadiusUtil.GetUtf8Bytes(sharedSecret));
             RemoveAttributes(USER_PASSWORD);
             AddAttribute(new RadiusAttribute(USER_PASSWORD, pass));
         }
-        else if (GetAuthProtocol().Equals(AUTH_CHAP))
+        else if (authProtocol.Equals(AUTH_CHAP))
         {
             byte[] challenge = CreateChapChallenge();
             byte[] pass = EncodeChapPassword(password, challenge);
@@ -215,11 +262,11 @@ public class AccessRequest : RadiusPacket
             AddAttribute(new RadiusAttribute(CHAP_PASSWORD, pass));
             AddAttribute(new RadiusAttribute(CHAP_CHALLENGE, challenge));
         }
-        else if (GetAuthProtocol().Equals(AUTH_MS_CHAP_V2))
+        else if (authProtocol.Equals(AUTH_MS_CHAP_V2))
         {
             throw new InvalidOperationException($"Encoding not supported for {AUTH_MS_CHAP_V2}");
         }
-        else if (GetAuthProtocol().Equals(AUTH_EAP))
+        else if (authProtocol.Equals(AUTH_EAP))
         {
             throw new InvalidOperationException($"Encoding not supported for {AUTH_EAP}");
         }
@@ -310,7 +357,7 @@ public class AccessRequest : RadiusPacket
         if (encryptedPass == null || encryptedPass.Length < 16)
         {
             // PAP passwords require at least 16 bytes
-            //logger.Warn($"Invalid Radius packet: User-Password attribute with malformed PAP password, length = {(encryptedPass == null ? 0 : encryptedPass.Length)}, but length must be greater than 15");
+            Console.WriteLine($"Invalid Radius packet: User-Password attribute with malformed PAP password, length = {(encryptedPass == null ? 0 : encryptedPass.Length)}, but length must be greater than 15");
             throw new RadiusException("Malformed User-Password attribute");
         }
 
@@ -326,7 +373,6 @@ public class AccessRequest : RadiusPacket
 
             Array.Copy(encryptedPass, i, lastBlock, 0, 16);
 
-            // perform the XOR as specified by RFC 2865.
             for (int j = 0; j < 16; j++)
                 encryptedPass[i + j] = (byte)(bn[j] ^ encryptedPass[i + j]);
         }
@@ -403,71 +449,6 @@ public class AccessRequest : RadiusPacket
                 return false;
         return true;
     }
-
-    /// <summary>
-    /// Temporary storage for the unencrypted User-Password attribute.
-    /// </summary>
-    private string password;
-
-    /// <summary>
-    /// Authentication protocol for this access request.
-    /// </summary>
-    private string authProtocol = AUTH_PAP;
-
-    /// <summary>
-    /// CHAP password from a decoded CHAP Access-Request.
-    /// </summary>
-    private byte[] chapPassword;
-
-    /// <summary>
-    /// CHAP challenge from a decoded CHAP Access-Request.
-    /// </summary>
-    private byte[] chapChallenge;
-
-    /// <summary>
-    /// Random generator
-    /// </summary>
-    private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
-
-    /// <summary>
-    /// Radius type code for Radius attribute User-Name
-    /// </summary>
-    private const int USER_NAME = 1;
-
-    /// <summary>
-    /// Radius attribute type for User-Password attribute.
-    /// </summary>
-    private const int USER_PASSWORD = 2;
-
-    /// <summary>
-    /// Radius attribute type for CHAP-Password attribute.
-    /// </summary>
-    private const int CHAP_PASSWORD = 3;
-
-    /// <summary>
-    /// Radius attribute type for CHAP-Challenge attribute.
-    /// </summary>
-    private const int CHAP_CHALLENGE = 60;
-
-    /// <summary>
-    /// Radius attribute type for EAP-Message attribute.
-    /// </summary>
-    private const int EAP_MESSAGE = 79;
-
-    /// <summary>
-    /// Vendor id for Microsoft
-    /// </summary>
-    private const int MICROSOFT = 311;
-
-    /// <summary>
-    /// Radius attribute type for MS-CHAP-Challenge attribute.
-    /// </summary>
-    private const int MS_CHAP_CHALLENGE = 11;
-
-    /// <summary>
-    /// Radius attribute type for MS-CHAP-Challenge attribute.
-    /// </summary>
-    private const int MS_CHAP2_RESPONSE = 25;
 
     /// <summary>
     /// Logger for logging information about malformed packets

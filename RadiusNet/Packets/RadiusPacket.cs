@@ -36,16 +36,11 @@ public class RadiusPacket
 
     public const int MAX_PACKET_LENGTH = 4096;
     public const int RADIUS_HEADER_LENGTH = 20;
-
-    private static int nextPacketId = 0;
-    private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
-    public byte[] authenticator = null;
-    private IDictionary dictionary = DefaultDictionary.GetDefaultDictionary();
-
+    
     public int PacketType { get; set; } = UNDEFINED;
     public int PacketIdentifier { get; private set; } = 0;
     public List<RadiusAttribute> Attributes { get; private set; } = new List<RadiusAttribute>();
-
+    
     public RadiusPacket(int type)
     {
         PacketType = type;
@@ -58,6 +53,11 @@ public class RadiusPacket
         PacketIdentifier = identifier;
     }
 
+    private static int nextPacketId = 0;
+    private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
+    private byte[] authenticator = null;
+    private IDictionary dictionary = DefaultDictionary.GetDefaultDictionary();
+    
     public RadiusPacket(int type, int identifier, List<RadiusAttribute> attributes)
     {
         PacketType = type;
@@ -65,18 +65,11 @@ public class RadiusPacket
         Attributes = attributes;
     }
 
-    public RadiusPacket()
+    private RadiusPacket()
     {
     }
 
-    public void SetPacketIdentifier(int identifier)
-    {
-        if (identifier < 0 || identifier > 255)
-            throw new ArgumentOutOfRangeException(nameof(identifier), "Packet identifier out of bounds");
-        PacketIdentifier = identifier;
-    }
-
-    public string GetPacketTypeName()
+    private string GetPacketTypeName()
     {
         return PacketType switch
         {
@@ -155,7 +148,7 @@ public class RadiusPacket
         AddAttribute(attribute);
     }
 
-    public void RemoveAttribute(RadiusAttribute attribute)
+    private void RemoveAttribute(RadiusAttribute attribute)
     {
         if (attribute.GetVendorId() == -1)
         {
@@ -178,7 +171,7 @@ public class RadiusPacket
         }
     }
 
-    public void RemoveAttributes(int type)
+    protected void RemoveAttributes(int type)
     {
         if (type < 1 || type > 255)
             throw new ArgumentOutOfRangeException(nameof(type), "Attribute type out of bounds");
@@ -222,7 +215,7 @@ public class RadiusPacket
         return Attributes.Where(a => a.GetAttributeType() == attributeType).ToList();
     }
 
-    public List<RadiusAttribute> GetAttributes(int vendorId, int attributeType)
+    private List<RadiusAttribute> GetAttributes(int vendorId, int attributeType)
     {
         if (vendorId == -1)
             return GetAttributes(attributeType);
@@ -233,7 +226,7 @@ public class RadiusPacket
             .ToList();
     }
 
-    public RadiusAttribute GetAttribute(int type)
+    protected RadiusAttribute GetAttribute(int type)
     {
         var attrs = GetAttributes(type);
         if (attrs.Count > 1)
@@ -241,7 +234,7 @@ public class RadiusPacket
         return attrs.SingleOrDefault();
     }
 
-    public RadiusAttribute GetAttribute(int vendorId, int type)
+    protected RadiusAttribute GetAttribute(int vendorId, int type)
     {
         if (vendorId == -1)
             return GetAttribute(type);
@@ -252,7 +245,7 @@ public class RadiusPacket
         return attrs.SingleOrDefault();
     }
 
-    public RadiusAttribute GetAttribute(string type)
+    private RadiusAttribute GetAttribute(string type)
     {
         if (string.IsNullOrEmpty(type))
             throw new ArgumentException("Type name is empty", nameof(type));
@@ -268,7 +261,7 @@ public class RadiusPacket
         return GetAttribute(type)?.GetAttributeValue();
     }
 
-    public List<VendorSpecificAttribute> GetVendorAttributes(int vendorId)
+    private List<VendorSpecificAttribute> GetVendorAttributes(int vendorId)
     {
         return Attributes
             .OfType<VendorSpecificAttribute>()
@@ -276,7 +269,7 @@ public class RadiusPacket
             .ToList();
     }
 
-    public static int GetNextPacketIdentifier()
+    protected static int GetNextPacketIdentifier()
     {
         nextPacketId++;
         if (nextPacketId > 255)
@@ -284,7 +277,7 @@ public class RadiusPacket
         return nextPacketId;
     }
 
-    public static RadiusPacket CreateRadiusPacket(int type)
+    private static RadiusPacket CreateRadiusPacket(int type)
     {
         RadiusPacket rp = type switch
         {
@@ -395,26 +388,18 @@ public class RadiusPacket
             authenticator = UpdateRequestAuthenticator(sharedSecret, packetLength, attributes);
         }
         
-        // Now write the actual packet
-        using (var writer = new BinaryWriter(outStream, Encoding.UTF8, true))
-        {
-            // Code
-            writer.Write((byte)PacketType);
-            // ID
-            writer.Write((byte)PacketIdentifier);
-            // Length (in network byte order)
-            writer.Write((byte)(packetLength >> 8));
-            writer.Write((byte)(packetLength & 0xff));
-            // Authenticator
-            writer.Write(authenticator);
-            // Attributes
-            writer.Write(attributes);
-        }
+        using var writer = new BinaryWriter(outStream, Encoding.UTF8, true);
+        writer.Write((byte)PacketType);
+        writer.Write((byte)PacketIdentifier);
+        writer.Write((byte)(packetLength >> 8));
+        writer.Write((byte)(packetLength & 0xff));
+        writer.Write(authenticator);
+        writer.Write(attributes);
     }
 
     protected virtual void EncodeRequestAttributes(string sharedSecret) { }
 
-    protected byte[] CreateRequestAuthenticator(string sharedSecret)
+    private byte[] CreateRequestAuthenticator(string sharedSecret)
     {
         var secretBytes = RadiusUtil.GetUtf8Bytes(sharedSecret);
         var randomBytes = new byte[16];
@@ -435,26 +420,16 @@ public class RadiusPacket
 
     protected byte[] CreateResponseAuthenticator(string sharedSecret, int packetLength, byte[] attributes, byte[] requestAuthenticator)
     {
-        using (MD5 md5 = MD5.Create())
-        {
-            md5.Initialize();
-            // Paket tipini ekle
-            md5.TransformBlock(new byte[] { (byte)PacketType }, 0, 1, null, 0);
-            // Paket kimliğini ekle
-            md5.TransformBlock(new byte[] { (byte)PacketIdentifier }, 0, 1, null, 0);
-            // Paket uzunluğunu ekle (büyük endian)
-            md5.TransformBlock(new byte[] { (byte)(packetLength >> 8), (byte)(packetLength & 0xFF) }, 0, 2, null, 0);
-            // İstek kimlik doğrulayıcısını ekle
-            md5.TransformBlock(requestAuthenticator, 0, requestAuthenticator.Length, null, 0);
-            // Özellikleri ekle
-            md5.TransformBlock(attributes, 0, attributes.Length, null, 0);
-            // Paylaşılan sırrı ekle
-            byte[] sharedSecretBytes = Encoding.UTF8.GetBytes(sharedSecret);
-            md5.TransformFinalBlock(sharedSecretBytes, 0, sharedSecretBytes.Length);
-
-            // Sonuç döndür
-            return md5.Hash;
-        }
+        using MD5 md5 = MD5.Create();
+        md5.Initialize();
+        md5.TransformBlock(new byte[] { (byte)PacketType }, 0, 1, null, 0);
+        md5.TransformBlock(new byte[] { (byte)PacketIdentifier }, 0, 1, null, 0);
+        md5.TransformBlock(new byte[] { (byte)(packetLength >> 8), (byte)(packetLength & 0xFF) }, 0, 2, null, 0);
+        md5.TransformBlock(requestAuthenticator, 0, requestAuthenticator.Length, null, 0);
+        md5.TransformBlock(attributes, 0, attributes.Length, null, 0);
+        byte[] sharedSecretBytes = Encoding.UTF8.GetBytes(sharedSecret);
+        md5.TransformFinalBlock(sharedSecretBytes, 0, sharedSecretBytes.Length);
+        return md5.Hash;
     }
 
 
@@ -532,29 +507,31 @@ public class RadiusPacket
 
     protected virtual void CheckResponseAuthenticator(string sharedSecret, int packetLength, byte[] attributes, byte[] requestAuthenticator)
     {
-        var authenticator = CreateResponseAuthenticator(sharedSecret, packetLength, attributes, requestAuthenticator);
-        var receivedAuth = GetAuthenticator();
+        byte[] authenticator = CreateResponseAuthenticator(sharedSecret, packetLength, attributes, requestAuthenticator);
+        byte[] receivedAuth = GetAuthenticator();
         if (!authenticator.SequenceEqual(receivedAuth))
             throw new RadiusException("Response authenticator invalid");
     }
 
-    protected byte[] GetAttributeBytes()
+    private void SetPacketIdentifier(int identifier)
     {
-        // Sıralı ve güvenilir buffer
+        if (identifier < 0 || identifier > 255)
+            throw new ArgumentOutOfRangeException(nameof(identifier), "Packet identifier out of bounds");
+        PacketIdentifier = identifier;
+    }
+    
+    private byte[] GetAttributeBytes()
+    {
         using var bos = new MemoryStream();
-
-        // Sıralı koleksiyon kontrolü
         foreach (var a in Attributes.OrderBy(attr => attr.GetAttributeType()))
         {
             var buffer = a.WriteAttribute();
             if (bos.Length + buffer.Length > MAX_PACKET_LENGTH)
                 throw new InvalidOperationException("Packet too long");
 
-            bos.Write(buffer, 0, buffer.Length); // Buffer üzerinden yaz
+            bos.Write(buffer, 0, buffer.Length);
         }
-
-        bos.Flush(); // Tamponu temizle
-        return bos.ToArray(); // Byte dizisine dönüştür
+        bos.Flush();
+        return bos.ToArray();
     }
-
 }

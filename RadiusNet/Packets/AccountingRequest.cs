@@ -11,6 +11,9 @@ public class AccountingRequest : RadiusPacket
     public const int ACCT_STATUS_TYPE_INTERIM_UPDATE = 3;
     public const int ACCT_STATUS_TYPE_ACCOUNTING_ON = 7;
     public const int ACCT_STATUS_TYPE_ACCOUNTING_OFF = 8;
+    
+    private const int USER_NAME = 1;
+    private const int ACCT_STATUS_TYPE = 40;
 
     //private static readonly ILogger<AccountingRequest> logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<AccountingRequest>();
 
@@ -73,7 +76,6 @@ public class AccountingRequest : RadiusPacket
         md5.TransformBlock(attributes, 0, attributes.Length, null, 0);
         md5.TransformBlock(RadiusUtil.GetUtf8Bytes(sharedSecret), 0, sharedSecret.Length, null, 0);
         md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-
         return md5.Hash;
     }
 
@@ -87,7 +89,4 @@ public class AccountingRequest : RadiusPacket
                 throw new RadiusException("Request authenticator invalid");
         }
     }
-
-    private const int USER_NAME = 1;
-    private const int ACCT_STATUS_TYPE = 40;
 }
